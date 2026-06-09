@@ -12,6 +12,8 @@
 
 ### Bug Fixes
 
+- fix: |CI| Restore the optional `mail-parser-wasm-worker` patch flow to avoid GitHub Actions failing when the WASM parser block has already been enabled in source
+
 ### Improvements
 
 ## v1.9.0

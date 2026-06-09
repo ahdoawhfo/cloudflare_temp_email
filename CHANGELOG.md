@@ -12,6 +12,8 @@
 
 ### Bug Fixes
 
+- fix: |CI| 恢复 `mail-parser-wasm-worker` 可选补丁流程，避免源码已提前启用 WASM 解析导致 GitHub Actions 重复应用补丁失败
+
 ### Improvements
 
 ## v1.9.0
