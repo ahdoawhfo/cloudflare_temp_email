@@ -67,11 +67,17 @@ jobs:
           if [ "$debug_mode" = "true" ]; then
             pnpm run deploy
           else
-            if pnpm run deploy >/dev/null 2>&1; then
+            set +e
+            pnpm run deploy > deploy.log 2>&1
+            code=$?
+            set -e
+            if [ "$code" -eq 0 ]; then
               echo "Deploy succeeded"
             else
-              code=$?
               echo "Command failed with exit code $code"
+              echo "::group::Deploy error log (redacted)"
+              grep -v "Environment Variable" deploy.log | tail -n 160
+              echo "::endgroup::"
               exit "$code"
             fi
           fi

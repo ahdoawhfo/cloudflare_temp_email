@@ -13,6 +13,7 @@
 ### Bug Fixes
 
 - fix: |CI| 恢复 `mail-parser-wasm-worker` 可选补丁流程，避免源码已提前启用 WASM 解析导致 GitHub Actions 重复应用补丁失败
+- fix: |CI| 后端部署失败时输出脱敏后的 `wrangler deploy` 错误日志，避免默认静默模式只显示退出码而无法定位 Cloudflare 部署失败原因
 
 ### Improvements
 

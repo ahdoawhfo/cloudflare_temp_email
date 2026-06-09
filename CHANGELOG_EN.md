@@ -13,6 +13,7 @@
 ### Bug Fixes
 
 - fix: |CI| Restore the optional `mail-parser-wasm-worker` patch flow to avoid GitHub Actions failing when the WASM parser block has already been enabled in source
+- fix: |CI| Print a redacted `wrangler deploy` error log when backend deployment fails, so the default quiet mode no longer hides the Cloudflare deployment failure behind only an exit code
 
 ### Improvements
 
