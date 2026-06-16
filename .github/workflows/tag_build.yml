@@ -95,8 +95,15 @@ jobs:
           cd worker
           echo "Using mail-parser-wasm-worker"
           pnpm add mail-parser-wasm-worker
-          git apply ../.github/config/mail-parser-wasm-worker.patch
-          echo "Applied mail-parser-wasm-worker patch"
+          if grep -qE "^[[:space:]]*const[[:space:]]+\\{[[:space:]]*parse_message_wrapper[[:space:]]*\\}.*mail-parser-wasm-worker" src/common.ts; then
+            echo "mail-parser-wasm-worker patch already present"
+          elif git apply --check ../.github/config/mail-parser-wasm-worker.patch; then
+            git apply ../.github/config/mail-parser-wasm-worker.patch
+            echo "Applied mail-parser-wasm-worker patch"
+          else
+            echo "::error::Unable to apply mail-parser-wasm-worker patch. Check worker/src/common.ts against .github/config/mail-parser-wasm-worker.patch"
+            exit 1
+          fi
           pnpm build
           zip -r worker-with-wasm-mail-parser.zip dist/worker.js dist/*.wasm
 

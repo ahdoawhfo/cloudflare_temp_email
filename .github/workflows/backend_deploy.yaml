@@ -52,16 +52,38 @@ jobs:
           export use_mail_wasm_parser=${{ secrets.BACKEND_USE_MAIL_WASM_PARSER }}
           
           cd worker/
+          for required_secret in CLOUDFLARE_ACCOUNT_ID CLOUDFLARE_API_TOKEN WRANGLER_TOML_CONTENT; do
+            if [ -z "${!required_secret}" ]; then
+              secret_name="$required_secret"
+              if [ "$required_secret" = "WRANGLER_TOML_CONTENT" ]; then
+                secret_name="BACKEND_TOML"
+              fi
+              echo "::error::Missing required GitHub secret for backend deploy: ${secret_name}"
+              exit 1
+            fi
+          done
+
           # ✅ 修复核心：使用环境变量写入，避免 Shell 解析特殊字符
           printf '%s\n' "$WRANGLER_TOML_CONTENT" > wrangler.toml
+          if ! grep -qE '^[[:space:]]*main[[:space:]]*=' wrangler.toml; then
+            echo "::error::Invalid BACKEND_TOML: missing Worker entrypoint, e.g. main = \"src/worker.ts\""
+            exit 1
+          fi
           
           pnpm install --no-frozen-lockfile
 
           if [ -n "$use_mail_wasm_parser" ]; then
             echo "Using mail-parser-wasm-worker"
             pnpm add mail-parser-wasm-worker
-            git apply ../.github/config/mail-parser-wasm-worker.patch
-            echo "Applied mail-parser-wasm-worker patch"
+            if grep -qE "^[[:space:]]*const[[:space:]]+\\{[[:space:]]*parse_message_wrapper[[:space:]]*\\}.*mail-parser-wasm-worker" src/common.ts; then
+              echo "mail-parser-wasm-worker patch already present"
+            elif git apply --check ../.github/config/mail-parser-wasm-worker.patch; then
+              git apply ../.github/config/mail-parser-wasm-worker.patch
+              echo "Applied mail-parser-wasm-worker patch"
+            else
+              echo "::error::Unable to apply mail-parser-wasm-worker patch. Check worker/src/common.ts against .github/config/mail-parser-wasm-worker.patch"
+              exit 1
+            fi
           fi
 
           if [ "$debug_mode" = "true" ]; then
