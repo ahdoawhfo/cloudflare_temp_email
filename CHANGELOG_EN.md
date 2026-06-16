@@ -12,6 +12,7 @@
 
 ### Bug Fixes
 
+- fix: |CI| Change `Upstream Sync` from fork fast-forward syncing to merging upstream `main` via the GitHub API, preserving custom commits in this repository and preventing deployments from running after a failed sync
 - fix: |CI| Validate `BACKEND_TOML` and Cloudflare credentials before backend deployment, and report a clear error when `BACKEND_TOML` is missing the `main` entrypoint instead of only showing `Command failed with exit code 1`
 - fix: |CI| Restore the optional `mail-parser-wasm-worker` patch flow to avoid GitHub Actions failing when the WASM parser block has already been enabled in source
 - fix: |CI| Print a redacted `wrangler deploy` error log when backend deployment fails, so the default quiet mode no longer hides the Cloudflare deployment failure behind only an exit code

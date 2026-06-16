@@ -7,12 +7,101 @@ on:
 
 jobs:
   sync_latest_from_upstream:
-    name: Sync latest commits from upstream repo
+    name: Merge latest commits from upstream repo
     runs-on: ubuntu-latest
     if: ${{ github.event.repository.fork }}
+    permissions:
+      contents: write
 
     steps:
-      - name: Sync upstream changes
-        run: gh repo sync ${{ github.repository }} --source dreamhunter2333/cloudflare_temp_email --branch main
+      - name: Checkout target branch
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Merge upstream changes
+        run: |
+          set -euo pipefail
+
+          git remote add upstream "https://github.com/${UPSTREAM_REPO}.git"
+          git fetch --no-tags upstream main
+
+          current_sha="$(git rev-parse HEAD)"
+          upstream_sha="$(git rev-parse upstream/main)"
+
+          echo "Target main:   ${current_sha}"
+          echo "Upstream main: ${upstream_sha}"
+
+          if git merge-base --is-ancestor "$upstream_sha" HEAD; then
+            echo "Target branch already contains upstream main"
+            exit 0
+          fi
+
+          set +e
+          git merge --no-commit --no-ff "$upstream_sha"
+          merge_status=$?
+          set -e
+
+          fork_owned_paths=(
+            ".github/workflows/sync.yaml"
+            ".github/workflows/backend_deploy.yaml"
+            ".github/workflows/frontend_deploy.yaml"
+            ".github/workflows/frontend_pagefunction_deploy.yaml"
+            ".github/workflows/tag_build.yml"
+            ".github/config/mail-parser-wasm-worker.patch"
+          )
+
+          upstream_owned_paths=(
+            "CHANGELOG.md"
+            "CHANGELOG_EN.md"
+          )
+
+          if [ "$merge_status" -ne 0 ]; then
+            echo "Merge reported conflicts; applying fork conflict policy"
+
+            for path in "${fork_owned_paths[@]}"; do
+              if git ls-files -u -- "$path" | grep -q .; then
+                echo "Keeping fork version for $path"
+                git checkout --ours -- "$path"
+                git add -- "$path"
+              fi
+            done
+
+            for path in "${upstream_owned_paths[@]}"; do
+              if git ls-files -u -- "$path" | grep -q .; then
+                echo "Keeping upstream version for $path"
+                git checkout --theirs -- "$path"
+                git add -- "$path"
+              fi
+            done
+
+            if git diff --name-only --diff-filter=U | grep -q .; then
+              echo "::error::Upstream sync still has unresolved conflicts:"
+              git diff --name-only --diff-filter=U
+              echo "Resolve these conflicts manually on main, then rerun this workflow."
+              exit 1
+            fi
+          fi
+
+          if git diff --cached --quiet; then
+            echo "No merge changes to commit"
+            exit 0
+          fi
+
+          tree_sha="$(git write-tree)"
+          merge_sha="$(gh api -X POST "repos/${TARGET_REPO}/git/commits" \
+            -f message="chore: merge upstream main" \
+            -f tree="$tree_sha" \
+            -F "parents[]=$current_sha" \
+            -F "parents[]=$upstream_sha" \
+            --jq '.sha')"
+
+          gh api -X PATCH "repos/${TARGET_REPO}/git/refs/heads/main" \
+            -f sha="$merge_sha"
+
+          echo "Merged upstream main into target main: ${merge_sha}"
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TARGET_REPO: ${{ github.repository }}
+          UPSTREAM_REPO: dreamhunter2333/cloudflare_temp_email
