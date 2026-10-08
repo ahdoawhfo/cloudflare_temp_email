@@ -12,6 +12,8 @@
 
 ### Bug Fixes
 
+- fix: |CI| 每周同步上游并提交保活记录；无冲突时也保留 fork 专有配置，保留自定义更新日志，未知冲突安全停止，并补充上游升级兼容性说明
+
 - fix: |CI| 将 `Upstream Sync` 从强依赖 fork 快进同步改为通过 GitHub API 合并上游 `main`，保留本仓库自定义提交，并避免同步失败后继续触发部署
 - fix: |CI| 后端部署前显式校验 `BACKEND_TOML` / Cloudflare 凭据，并在 `BACKEND_TOML` 缺少 `main` 入口时给出明确错误，避免只看到 `Command failed with exit code 1`
 - fix: |CI| 恢复 `mail-parser-wasm-worker` 可选补丁流程，避免源码已提前启用 WASM 解析导致 GitHub Actions 重复应用补丁失败

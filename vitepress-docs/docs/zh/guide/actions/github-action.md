@@ -71,3 +71,8 @@
 
 1. 打开仓库的 `Actions` 页面，找到 `Upstream Sync`，点击 `enable workflow` 启用 `workflow`
 2. 如果 `Upstream Sync` 运行失败，到仓库主页点击 `Sync` 手动同步即可
+
+
+## Fork 同步与兼容性
+
+本 fork 的自动同步保护策略、工作流恢复步骤及上游升级配置检查，请参阅 [Fork 上游同步与升级检查](./fork-upstream-sync)。

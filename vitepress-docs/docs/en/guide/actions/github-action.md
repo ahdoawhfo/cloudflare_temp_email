@@ -71,3 +71,8 @@ If you want to use `Upstream Sync` for automatic updates and also let Pages forw
 
 1. Open the `Actions` page of the repository, find `Upstream Sync`, and click `enable workflow` to enable the `workflow`
 2. If `Upstream Sync` fails, go to the repository homepage and click `Sync` to synchronize manually
+
+
+## Fork sync and compatibility
+
+For this fork’s protection policy, workflow recovery and upgrade configuration review, see [Fork upstream sync and upgrade review](./fork-upstream-sync).

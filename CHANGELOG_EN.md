@@ -12,6 +12,8 @@
 
 ### Bug Fixes
 
+- fix: |CI| Sync upstream weekly with heartbeat commits, preserve fork-owned configuration even in clean merges and custom changelog entries, fail safely on unknown conflicts, and document upgrade compatibility
+
 - fix: |CI| Change `Upstream Sync` from fork fast-forward syncing to merging upstream `main` via the GitHub API, preserving custom commits in this repository and preventing deployments from running after a failed sync
 - fix: |CI| Validate `BACKEND_TOML` and Cloudflare credentials before backend deployment, and report a clear error when `BACKEND_TOML` is missing the `main` entrypoint instead of only showing `Command failed with exit code 1`
 - fix: |CI| Restore the optional `mail-parser-wasm-worker` patch flow to avoid GitHub Actions failing when the WASM parser block has already been enabled in source

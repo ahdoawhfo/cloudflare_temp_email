@@ -2,8 +2,12 @@ name: Upstream Sync
 
 on:
   schedule:
-    - cron: "0 0 * * 1"
+    - cron: "17 3 * * 1"
   workflow_dispatch:
+
+concurrency:
+  group: upstream-sync-main
+  cancel-in-progress: false
 
 jobs:
   sync_latest_from_upstream:
@@ -17,6 +21,7 @@ jobs:
       - name: Checkout target branch
         uses: actions/checkout@v6
         with:
+          ref: main
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
 
@@ -33,18 +38,35 @@ jobs:
           echo "Target main:   ${current_sha}"
           echo "Upstream main: ${upstream_sha}"
 
-          if git merge-base --is-ancestor "$upstream_sha" HEAD; then
-            echo "Target branch already contains upstream main"
-            exit 0
+          merge_needed=false
+          merge_status=0
+          if ! git merge-base --is-ancestor "$upstream_sha" HEAD; then
+            merge_needed=true
+            set +e
+            merge_result="$(git merge-tree --write-tree "$current_sha" "$upstream_sha")"
+            merge_status=$?
+            set -e
+            if [ "$merge_status" -gt 1 ]; then
+              echo "::error::Unable to compute upstream merge"
+              exit "$merge_status"
+            fi
+            # merge-tree does not require a Git author/committer identity.
+            git read-tree "${merge_result%%$'\n'*}"
+            conflict_paths="$(printf '%s\n' "$merge_result" | awk -F '\t' '/^[0-9]+ [0-9a-f]+ [123]\t/ {print $2}' | sort -u)"
+            if [ "$merge_status" -eq 1 ] && [ -z "$conflict_paths" ]; then
+              echo "::error::Merge conflict output is not recognized; manual review required"
+              exit 1
+            fi
+            printf '%s\n' "$merge_result"
           fi
-
-          set +e
-          git merge --no-commit --no-ff "$upstream_sha"
-          merge_status=$?
-          set -e
 
           fork_owned_paths=(
             ".github/workflows/sync.yaml"
+            ".github/config/upstream-sync-heartbeat"
+            "frontend/.env.pages"
+            "scripts/test-upstream-sync.py"
+            "vitepress-docs/docs/zh/guide/actions/fork-upstream-sync.md"
+            "vitepress-docs/docs/en/guide/actions/fork-upstream-sync.md"
             ".github/workflows/backend_deploy.yaml"
             ".github/workflows/frontend_deploy.yaml"
             ".github/workflows/frontend_pagefunction_deploy.yaml"
@@ -52,53 +74,81 @@ jobs:
             ".github/config/mail-parser-wasm-worker.patch"
           )
 
-          upstream_owned_paths=(
-            "CHANGELOG.md"
-            "CHANGELOG_EN.md"
-          )
+          # Restore protected paths even when Git merges them cleanly.
+          for path in "${fork_owned_paths[@]}"; do
+            if git cat-file -e "$current_sha:$path" 2>/dev/null; then
+              git restore --source="$current_sha" --staged -- "$path"
+            else
+              git rm --cached --ignore-unmatch -- "$path"
+            fi
+          done
 
           if [ "$merge_status" -ne 0 ]; then
-            echo "Merge reported conflicts; applying fork conflict policy"
-
-            for path in "${fork_owned_paths[@]}"; do
-              if git ls-files -u -- "$path" | grep -q .; then
-                echo "Keeping fork version for $path"
-                git checkout --ours -- "$path"
+            # Only known changelog conflicts are auto-resolved. Preserve the
+            # fork's added entries in the upstream current-version section.
+            for path in CHANGELOG.md CHANGELOG_EN.md; do
+              if printf '%s\n' "$conflict_paths" | grep -Fxq "$path"; then
+                python3 - "$path" "$current_sha" "$upstream_sha" <<'PYTHON'
+          import subprocess, sys
+          path, ours, theirs = sys.argv[1:]
+          def git(*args):
+              return subprocess.check_output(['git', *args], text=True)
+          base = git('merge-base', ours, theirs).strip()
+          additions = git('diff', '--unified=0', base, ours, '--', path)
+          entries = [line[1:] for line in additions.splitlines() if line.startswith('+- ')]
+          content = git('show', f'{theirs}:{path}')
+          entries = list(dict.fromkeys(entry for entry in entries if entry not in content))
+          if entries:
+              marker = '### Bug Fixes\n'
+              if marker not in content:
+                  raise SystemExit('Upstream changelog structure changed; manual review required')
+              content = content.replace(marker, marker + '\n' + '\n'.join(entries) + '\n', 1)
+          with open(path, 'w') as output:
+              output.write(content)
+          PYTHON
                 git add -- "$path"
               fi
             done
 
-            for path in "${upstream_owned_paths[@]}"; do
-              if git ls-files -u -- "$path" | grep -q .; then
-                echo "Keeping upstream version for $path"
-                git checkout --theirs -- "$path"
-                git add -- "$path"
+            unresolved=false
+            while IFS= read -r path; do
+              case "$path" in
+                CHANGELOG.md|CHANGELOG_EN.md) continue ;;
+              esac
+              protected=false
+              for owned in "${fork_owned_paths[@]}"; do
+                if [ "$path" = "$owned" ]; then protected=true; break; fi
+              done
+              if [ "$protected" = false ]; then
+                echo "::error::Unresolved upstream conflict: $path; resolve manually before syncing"
+                unresolved=true
               fi
-            done
-
-            if git diff --name-only --diff-filter=U | grep -q .; then
-              echo "::error::Upstream sync still has unresolved conflicts:"
-              git diff --name-only --diff-filter=U
-              echo "Resolve these conflicts manually on main, then rerun this workflow."
-              exit 1
-            fi
+            done < <(printf '%s\n' "$conflict_paths")
+            if [ "$unresolved" = true ]; then exit 1; fi
           fi
 
-          if git diff --cached --quiet; then
-            echo "No merge changes to commit"
-            exit 0
+          # Scheduled runs alone do not count as repository activity. A weekly
+          # heartbeat commit also keeps syncing alive when upstream is quiet.
+          mkdir -p .github/config
+          date -u +'%Y-%m-%dT%H:%M:%SZ' > .github/config/upstream-sync-heartbeat
+          git add -- .github/config/upstream-sync-heartbeat
+
+          commit_message="chore: upstream sync heartbeat"
+          parents=(-F "parents[]=$current_sha")
+          if [ "$merge_needed" = true ]; then
+            commit_message="chore: merge upstream main"
+            parents+=(-F "parents[]=$upstream_sha")
           fi
 
           tree_sha="$(git write-tree)"
           merge_sha="$(gh api -X POST "repos/${TARGET_REPO}/git/commits" \
-            -f message="chore: merge upstream main" \
+            -f message="$commit_message" \
             -f tree="$tree_sha" \
-            -F "parents[]=$current_sha" \
-            -F "parents[]=$upstream_sha" \
+            "${parents[@]}" \
             --jq '.sha')"
 
           gh api -X PATCH "repos/${TARGET_REPO}/git/refs/heads/main" \
-            -f sha="$merge_sha"
+            -f sha="$merge_sha" -F force=false
 
           echo "Merged upstream main into target main: ${merge_sha}"
         env:
