@@ -65,6 +65,7 @@ jobs:
             ".github/config/upstream-sync-heartbeat"
             "frontend/.env.pages"
             "scripts/test-upstream-sync.py"
+            "scripts/upload-sync-tree.py"
             "vitepress-docs/docs/zh/guide/actions/fork-upstream-sync.md"
             "vitepress-docs/docs/en/guide/actions/fork-upstream-sync.md"
             ".github/workflows/backend_deploy.yaml"
@@ -140,7 +141,9 @@ jobs:
             parents+=(-F "parents[]=$upstream_sha")
           fi
 
-          tree_sha="$(git write-tree)"
+          # Local merge objects do not exist on GitHub yet. Upload staged
+          # blobs and build the remote tree before creating the commit.
+          tree_sha="$(python3 scripts/upload-sync-tree.py)"
           merge_sha="$(gh api -X POST "repos/${TARGET_REPO}/git/commits" \
             -f message="$commit_message" \
             -f tree="$tree_sha" \

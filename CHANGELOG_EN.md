@@ -12,6 +12,8 @@
 
 ### Bug Fixes
 
+- fix: |CI| Upload merged blobs and the tree through the GitHub API before creating sync commits, fixing HTTP 422 caused by runner-local Tree SHAs
+
 - fix: |CI| Sync upstream weekly with heartbeat commits, preserve fork-owned configuration even in clean merges and custom changelog entries, fail safely on unknown conflicts, and document upgrade compatibility
 
 - fix: |CI| Change `Upstream Sync` from fork fast-forward syncing to merging upstream `main` via the GitHub API, preserving custom commits in this repository and preventing deployments from running after a failed sync
