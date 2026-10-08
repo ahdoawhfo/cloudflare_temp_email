@@ -6,22 +6,119 @@
   <a href="CHANGELOG_EN.md">English</a>
 </p>
 
-## v1.10.0(main)
+## v1.13.0(main)
 
 ### Features
+
+- feat: |用户系统| 邮箱地址管理支持按地址关键字搜索已绑定邮箱，并保持分页结果准确（issue #1156）
+- feat: |AI 识别| 新增 `AI_EXTRACT_MODE`，可显式选择仅用本地规则（`local`）或优先用 Workers AI（`ai`）识别邮件；不填默认使用本地规则，邮件内容不会发送给 AI。**升级注意**：原先依赖 Workers AI 绑定自动启用 AI 识别的部署需设置 `AI_EXTRACT_MODE = "ai"`
 
 ### Bug Fixes
 
 - fix: |CI| 创建同步提交前通过 GitHub API 上传合并后的 blob/tree，修复引用仅存在于 runner 本地的 Tree SHA 导致 HTTP 422
-
 - fix: |CI| 每周同步上游并提交保活记录；无冲突时也保留 fork 专有配置，保留自定义更新日志，未知冲突安全停止，并补充上游升级兼容性说明
-
 - fix: |CI| 将 `Upstream Sync` 从强依赖 fork 快进同步改为通过 GitHub API 合并上游 `main`，保留本仓库自定义提交，并避免同步失败后继续触发部署
 - fix: |CI| 后端部署前显式校验 `BACKEND_TOML` / Cloudflare 凭据，并在 `BACKEND_TOML` 缺少 `main` 入口时给出明确错误，避免只看到 `Command failed with exit code 1`
 - fix: |CI| 恢复 `mail-parser-wasm-worker` 可选补丁流程，避免源码已提前启用 WASM 解析导致 GitHub Actions 重复应用补丁失败
 - fix: |CI| 后端部署失败时输出脱敏后的 `wrangler deploy` 错误日志，避免默认静默模式只显示退出码而无法定位 Cloudflare 部署失败原因
 
+- fix: |收件| 黑名单同时检查 SMTP 信封发件人与邮件头 From 的全部邮箱地址，任意一个命中即拒收；独立解析地址，避免正文解析失败或多个发件地址导致漏拦截；地址解析异常时保留原有信封检查
+- fix: |AI 识别| `ai` 模式下地址未命中 AI 提取白名单时只跳过 Workers AI 调用，仍回退到本地规则提取验证码
+
 ### Improvements
+
+- feat: |AI 识别| 本地验证码规则增强：同时识别邮件标题，支持验证码在关键词前（如 `116352（动态验证码）`、`ABC123 is your code`）、`G-123456` 前缀、分组 / 空格 / 零宽字符 / 全角数字，新增俄西葡法德意土希伯来语等关键词；排除超过 8 位数字、小数金额、时间、URL 与邮箱地址中的数字、tracking / order / voucher code 及纯字母单词，收紧无关键词时的数字识别，并限制分析长度、消除正则回溯风险
+
+## v1.12.0
+
+### Features
+
+- feat: |Webhook| 测试弹框支持随机邮件或指定邮件 ID，校验请求体及邮箱归属并适配现有前端语言及中英文错误提示
+- feat: |Webhook| 支持无需 S3 的多附件签名链接、纯 URL 与 Markdown 链接列表，签名兼容大小写，绑定本次入库邮件并保留下载文件名，关闭 Webhook 时禁止附件下载（issue #1142）
+- feat: |Worker| 新增 `DISABLE_ADDRESS_UPDATED_AT`，可关闭单地址及用户批量的主动保活刷新，并禁止内置手动及定时不活跃地址清理，降低 D1 写入量
+- feat: |Frontend| 新增 `VITE_DEFAULT_LANG` 构建变量，并支持通过 `index.html` 运行时配置覆盖前端设置
+- feat: |兑换码| 新增角色、发信额度及专属邮箱兑换与管理，完善并发保护和表单提示
+- feat: |邮件| 新增可选的已读/未读状态，支持点击邮件自动已读和手动切换状态
+- feat: |Admin| 数据库页面新增 D1 存储容量展示，支持选择并保存 Free 或 Workers Paid 套餐，对比当前数据库大小和容量上限
+- feat: |Admin| 创建邮箱页面支持一键生成随机邮箱名称（issue #1126）
+- feat: |Admin API| 新增 `ADMIN_API_IP_WHITELIST`，可按来源 IP 限制所有管理接口访问
+- feat: |用户系统| 用户中心新增发送邮件、与收件箱一致的可按绑定地址过滤的发件箱，以及地址管理凭证弹框；提供使用用户 JWT 的地址设置、发信权限申请、发信及发件箱 API
+
+### Bug Fixes
+
+- fix: |邮箱鉴权| 修复旧邮箱凭证仍可访问 API、Telegram 越权解绑、重新绑定失效及外部发信保存凭证的问题，区分认证错误以准确提示站点及管理员登录，并将 E2E 测试接口移出生产代码
+- fix: |Frontend| 修复 AdSense 脚本包含不受支持的 `data-onload` 和 `data-onerror` 属性
+- fix: |Admin| 修复权限设置加载完成前短暂显示管理员密码输入框的问题
+- fix: |Admin| 修复切换一级标签页时二级标签页偶发无选中项、内容不显示及指示条偏移的问题
+- fix: |发信页面| 统一邮箱与名称字段顺序，并修复空正文输入框的光标与占位文字错位
+- fix: |用户发信| 用户地址发信接口支持角色无限额度
+
+### Improvements
+
+- fix: |Frontend| 统一邮箱、邮箱地址、用户账号与管理后台的核心界面术语，并补齐附加语言缺失的邮件状态与远程图片文案（issue #1129）
+- feat: |发信页面| 优化用户和 Admin 发信页面的信息层级与响应式布局，增加正文格式工具栏、草稿状态、底部发送操作区及隔离的 HTML 预览
+
+### Testing
+
+- test: |E2E| 覆盖 D1 数据库大小响应、配置键隔离，以及数据库页面套餐选择的持久化与刷新恢复
+- fix: |E2E| 覆盖发信页面草稿编辑、正文格式切换及 HTML 预览
+- fix: |E2E| 覆盖用户 JWT 发信接口的地址归属、额度扣减、实际投递和发件箱操作，以及用户中心查看地址凭证、切换发件地址和按地址过滤发件箱的完整流程
+
+## v1.11.0
+
+### Features
+
+- feat: |Frontend| 在随机子域名允许范围内新增普通、随机和自定义子域名模式选择（issue #1108）
+
+### Bug Fixes
+
+- fix: |Frontend| 将邮箱主页的账户设置、删除账户等表述更正为邮箱地址操作，并明确发信权限与额度按当前邮箱地址独立管理
+
+### Improvements
+
+- docs: |发送邮件| 补充用户账号、邮箱地址和发信权限的概念区别及按当前地址申请权限的操作说明
+
+- fix: |Worker| 地址活跃时间保活增加 1 天写入窗口，用户设置和邮箱访问不再重复更新近期活跃地址，降低 D1 写入量（issue #1103）
+
+- feat: |用户系统| 用户绑定地址列表改用服务端分页，并仅在第一页查询总数；用户邮件列表改用 JOIN、删除改用 `EXISTS` 在数据库侧校验地址归属，避免为大用户加载全部绑定地址（issue #1103）
+
+- feat: |Worker| 邮件、发件箱及按创建/活跃时间清理地址时改为分批处理，默认每次最多 3000 条并支持通过 `CLEANUP_BATCH_SIZE` 调整（上限 5000），减少单次扫描和删除量（issue #1103）
+
+### Testing
+
+- fix: |E2E| 新增近期地址活跃时间不会被用户设置接口重复写入的回归测试
+- fix: |E2E| 新增清理批次上限、后续批次继续执行、保留未过期数据及地址关联数据清理测试
+
+## v1.10.0
+
+### Features
+
+- feat: |Admin| 新增 `GET /admin/mails/:id` 接口，支持管理员按邮件 ID 跨邮箱读取单封邮件，并兼容 gzip 压缩存储（issue #1096）
+- feat: |Frontend| 邮箱新增「邮箱全宽列表视图」开关（在外观设置中控制），开启后默认全宽列表展示邮件标题与正文预览，点击单封邮件再展开为双栏，再次点击同一封邮件可回到列表视图；多选模式下点击邮件会同步切换勾选状态与右侧预览，并禁用同邮件点击收回列表，展开时双栏左侧列表宽度仍遵循「邮箱双栏视图左侧列表宽度占比」配置；默认关闭，保留原有双栏行为
+- feat: |Frontend| 邮箱全宽列表视图新增「正文预览行数」配置（在外观设置中控制），可设置邮件正文预览的最大行数，默认 2 行，0 表示关闭预览
+- feat: |Frontend| 外观设置新增「自动加载邮件正文中的外部图片」开关，关闭后邮件预览（含全屏视图）会先经 DOMPurify 消毒，并以白名单策略处理所有可能发起请求的位置：仅保留可证明为本地的引用（`cid:`、`data:image/`、`blob:` 与站内相对路径），其余一律阻断；`base`、`meta`、`script`、`link`、`iframe`、`object`、`embed`、`noscript` 等会自行取用资源或改变解析基准的元素在此模式下移除，`<style>` 保留但其中 `url()`、`image-set()`、`@import` 的远端引用会被替换。正文上方显示已阻断资源数量的提示条，可一键按封加载；默认保持开启，行为与此前一致（issue #1073）
+
+### Bug Fixes
+
+- fix: |Frontend| 关闭邮件外部图片自动加载时保留 `<a>` 与 `<area>` 的外部导航链接，并阻断通过 CSS 转义函数名或 at-rule 绕过远程资源过滤的情况
+- fix: |Frontend| 使用共享 DOMPurify 净化逻辑处理关于页面与启动通知中的 HTML 公告，避免 `ANNOUNCEMENT` 中的可执行标签或事件属性造成 XSS
+- fix: |Worker| 按邮件认证规范修复垃圾邮件检测：SPF、DKIM、DMARC 的 `none` 及 SPF/DKIM `neutral` 按认证方法不存在处理，并忽略未注册结果和不支持的方法版本；`JUNK_MAIL_FORCE_PASS_LIST` 仍要求明确返回受支持的 `pass`
+- fix: |Admin| 管理后台删除邮箱地址时，先删除该地址的邮件、发件记录、自动回复等关联数据，最后再删除地址本身；此前地址行先被删除导致按地址名匹配的子查询查不到数据，邮件等记录被遗留在数据库中
+- fix: |AI 提取| 强化提示词，要求 AI 保持邮件原始链接域名，避免小模型改写验证链接域名导致错误跳转（issue #1072）
+- fix: |AI 提取| HTML-only 邮件在发送给 Workers AI 前会先压缩为可读文本，避免样式模板过长导致验证码位于 4000 字截断之后而无法识别
+- fix: |Frontend| 移动端 Header 增加页头内边距，避免标题、菜单按钮与屏幕边缘过近
+- fix: |IMAP 代理| 修复 IMAP `STORE` 无法真正标记邮件已读的问题：邮件不再硬编码为 `\Seen`，且 `SimpleMailbox` 的 flags 变更现持久化到本地 SQLite（新增 `imap_flag_db_path` 配置），使已读/未读状态可在客户端断线重连（如 Thunderbird 轮询）后保留，而非每次新建连接即丢失（issue #1074）
+- fix: |IMAP 代理| 修复 `SEARCH UNSEEN` 返回全部邮件的问题：`SimpleMailbox.search()` 现按持久化的 flags 计算 `SEEN`/`UNSEEN`/`FLAGGED`/`DELETED`/`ANSWERED`/`DRAFT` 及其否定形式，多个条件按 AND 组合；无法识别的检索条件仍沿用原有行为返回全部邮件
+- fix: |IMAP 代理| 修复取信不会自动标记已读的问题：`BODY[...]`、`RFC822`、`RFC822.TEXT` 取信现按 RFC 3501 自动置 `\Seen`，而 `BODY.PEEK[...]`、`RFC822.HEADER` 及仅取元数据（如 `FLAGS`）不会
+
+### Testing
+
+- test: |Worker| 新增 junk_mail_policy 回归测试（issue #1084）：覆盖 SPF/DKIM/DMARC 的 `none`/`neutral` 按认证方法不存在处理、明确 `fail` 仍被拒收，以及 `JUNK_MAIL_FORCE_PASS_LIST` 仅接受明确 `pass`
+
+### Improvements
+
+- docs: |README| 新增完整日文 README，并在中文和英文 README 中添加日文导航链接
+- feat: |Frontend| 「邮箱双栏视图左侧列表宽度占比」最小值由 0.25 放宽至 0，左侧列表可完全折叠使正文近乎全屏，刻度增加 0 点；收件箱与发件箱的双栏拆分同步生效，并优化外观设置文案以明确该比例控制左侧邮件列表宽度
 
 ## v1.9.0
 
@@ -171,7 +268,7 @@
 
 - test: |E2E| 新增 Docker 化端到端测试环境（Playwright + Mailpit），`cd e2e && npm test` 一条命令运行
 - test: |E2E| 覆盖 API 健康检查、地址生命周期、SMTP 发信、收件箱 UI、回复 HTML 邮件及 XSS 防护
-- test: |Worker| 新增 `/admin/test/seed_mail` 测试端点，仅 `E2E_TEST_MODE` 启用时可用
+- test: |Worker| 新增 `/admin/test/seed_mail` 测试端点
 
 ### Improvements
 

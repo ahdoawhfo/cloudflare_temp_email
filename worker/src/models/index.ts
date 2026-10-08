@@ -26,6 +26,7 @@ export class AdminWebhookSettings {
 export type WebhookMail = {
     id: string;
     url?: string;
+    attachments?: { filename: string, mimeType: string, url: string }[];
     from: string;
     to: string;
     subject: string;
@@ -213,6 +214,7 @@ export type RawMailRow = {
     raw?: string;
     raw_blob?: unknown;
     metadata?: string;
+    is_unread?: number | null;
     created_at?: string;
 }
 
