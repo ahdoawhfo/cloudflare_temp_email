@@ -42,6 +42,9 @@ if endpoint.endswith('/blobs'):
     print(git('hash-object', '-w', '--stdin', input=base64.b64decode(payload['content'])).decode().strip())
 elif endpoint.endswith('/trees'):
     payload = json.load(sys.stdin)
+    # contents: write does not let GITHUB_TOKEN change workflow files.
+    if any(entry['path'].startswith('.github/workflows/') for entry in payload['tree']):
+        sys.exit('gh: Resource not accessible by integration (HTTP 403)')
     with tempfile.TemporaryDirectory() as tmp:
         env = dict(os.environ, GIT_INDEX_FILE=str(Path(tmp) / 'index'))
         git('read-tree', payload['base_tree'], env=env)
@@ -108,6 +111,7 @@ class SyncTests(unittest.TestCase):
         return self.git('commit-tree', self.git('write-tree'), '-p', parent, '-m', 'test fixture')
 
     def test_real_upstream_and_wasm(self):
+        expected_parents = 1 + (self.git('rev-list', '--count', 'HEAD..upstream/main') != '0')
         self.run_sync()
         self.assertEqual(self.git('show', ':.github/workflows/sync.yaml'),
                          self.git('show', 'HEAD:.github/workflows/sync.yaml'))
@@ -118,7 +122,8 @@ class SyncTests(unittest.TestCase):
         # Materialize merged index only in this disposable clone.
         self.git('checkout-index', '-a', '-f')
         self.git('apply', '--check', '.github/config/mail-parser-wasm-worker.patch')
-        self.assertEqual(Path(self.env['MOCK_LOG']).read_text().count('parents[]='), 2)
+        self.assertEqual(Path(self.env['MOCK_LOG']).read_text().count('parents[]='),
+                         expected_parents)
 
     def test_unchanged_upstream_heartbeat(self):
         self.git('update-ref', 'refs/remotes/upstream/main', self.head)
@@ -177,6 +182,23 @@ class SyncTests(unittest.TestCase):
         self.assertEqual(self.git('show', ':.github/workflows/backend_deploy.yaml'),
                          self.git('show', 'HEAD:.github/workflows/backend_deploy.yaml'))
 
+    def test_workflow_add_modify_delete_and_business_sync(self):
+        (self.repo / '.github/workflows/pr_agent.yml').write_text('upstream review workflow\n')
+        (self.repo / '.github/workflows/sync-new.yml').write_text('new upstream workflow\n')
+        self.git('add', '--', '.github/workflows')
+        self.git('rm', '--', '.github/workflows/docs_deploy.yml')
+        upstream = self.commit_tree(self.head, 'sync-fixture.txt', 'upstream business change\n')
+        self.git('reset', '--hard', self.head)
+        self.git('update-ref', 'refs/remotes/upstream/main', upstream)
+        result = self.run_sync()
+        merged_tree = self.git('write-tree')
+        self.assertEqual(self.git('rev-parse', f'{merged_tree}:.github/workflows'),
+                         self.git('rev-parse', 'HEAD:.github/workflows'))
+        self.assertEqual(self.git('show', ':sync-fixture.txt'), 'upstream business change')
+        for path in ('pr_agent.yml', 'sync-new.yml', 'docs_deploy.yml'):
+            self.assertIn(f'review upstream change manually: .github/workflows/{path}',
+                          result.stdout)
+
     def test_protected_conflict(self):
         path = '.github/workflows/backend_deploy.yaml'
         ours = self.commit_tree(self.head, path, 'fork configuration\n')
@@ -186,6 +208,26 @@ class SyncTests(unittest.TestCase):
         self.git('update-ref', 'refs/remotes/upstream/main', theirs)
         self.run_sync()
         self.assertEqual(self.git('show', f':{path}'), 'fork configuration')
+
+    def test_previously_unprotected_workflow_conflict(self):
+        path = '.github/workflows/pr_agent.yml'
+        ours = self.commit_tree(self.head, path, 'fork review configuration\n')
+        self.git('reset', '--hard', self.head)
+        theirs = self.commit_tree(self.head, path, 'upstream review configuration\n')
+        self.git('reset', '--hard', ours)
+        self.git('update-ref', 'refs/remotes/upstream/main', theirs)
+        self.run_sync()
+        self.assertEqual(self.git('show', f':{path}'), 'fork review configuration')
+
+    def test_upload_rejects_workflow_changes_before_api(self):
+        path = '.github/workflows/pr_agent.yml'
+        (self.repo / path).write_text('unreviewed workflow change\n')
+        self.git('add', '--', path)
+        result = subprocess.run(['python3', 'scripts/upload-sync-tree.py'], cwd=self.repo,
+                                env=self.env, text=True, capture_output=True)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('Workflow changes require manual review', result.stderr)
+        self.assertFalse(Path(self.env['MOCK_LOG']).exists())
 
     def test_unknown_conflict_stops_before_api(self):
         base = self.commit_tree(self.head, 'sync-fixture.txt', 'base\n')

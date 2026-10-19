@@ -36,7 +36,7 @@
 
 - 每周一 **03:17 UTC（北京时间 11:17）** 运行，也可手动触发；固定同步 `main`，并发任务串行执行。
 - 使用 `git merge-tree` 生成三方合并树，通过 GitHub Git API 创建提交，不修改 runner 的 Git 身份配置。
-- 以下路径始终恢复为 fork 当前版本，**不只处理冲突**：同步/后端/两种前端/标签构建工作流、WASM 补丁、`frontend/.env.pages`、同步测试/对象上传脚本、本中英文说明及保活文件。新增专有文件时同步维护工作流中的 `fork_owned_paths`。其他文件保留正常三方合并行为。
+- 以下路径始终恢复为 fork 当前版本，**不只处理冲突**：整个 `.github/workflows/` 目录、WASM 补丁、`frontend/.env.pages`、同步测试/对象上传脚本、本中英文说明及保活文件。工作流目录的保护也覆盖上游新增、删除和冲突；被跳过的变更会输出人工审查 notice，需自行审查后手动更新，不会自动同步。新增专有文件时同步维护工作流中的 `fork_owned_paths`。其他文件保留正常三方合并行为。
 - 更新日志冲突采用上游结构，并把 fork 相对共同祖先新增的 bullet 条目放回当前版本 Bug Fixes，避免丢失 fork 更新记录。该策略用于新增条目，不适合自动迁移任意修改过的历史段落。
 - 未知业务代码冲突停止，不发布合并提交、不强推。`force=false` 防止运行过程中 main 已更新时覆盖其他提交；此时重新运行即可。
 - 每次成功同步都更新 `.github/config/upstream-sync-heartbeat` 并提交，即使上游没有更新也产生仓库活动，避免公开仓库约 60 天无活动后定时工作流被停用。这会产生每周保活提交；现有 `workflow_run` 部署监听成功同步，因此无更新的保活运行也会触发部署。
@@ -48,11 +48,17 @@
 2. 在 GitHub **Actions → Upstream Sync → Enable workflow** 手动重新启用。已经禁用的工作流无法依靠自己的 cron 唤醒。
 3. 由于成功同步会自动触发现有部署，**首次运行前先备份 D1 并准备迁移窗口**；若要先审查合并而不部署，暂时手动禁用部署工作流，完成后再恢复。
 4. 手动 Run workflow；成功后检查差异及受保护配置，再执行 Schema 迁移，按需增加新变量，验证收件、登录、发件、Webhook 和 WASM 解析。
-5. 保留现有 `contents: write` 权限；分支保护/Ruleset 必须允许该同步方式。`GITHUB_TOKEN` 不能任意改写工作流文件：如果未来上游修改未保护的其他 `.github/workflows/*` 导致拒绝写入，应人工审查/合并，不要无审查扩大 Token 权限。
+5. 保留现有 `contents: write` 权限；分支保护/Ruleset 必须允许该同步方式。`GITHUB_TOKEN` 不能改写工作流文件，因此整个 `.github/workflows/` 目录都不自动同步；请人工审查并通过有权限的正常提交流程更新，不需要为自动同步新增 PAT 或扩大 Token 权限。
 
 本次隔离验证只检查合并树、配置保护、日志保留、未知冲突中止及 WASM 补丁兼容性；未执行真实 GitHub API 写入、Cloudflare 部署或生产数据库迁移。
 
-创建远端提交前，`scripts/upload-sync-tree.py` 将暂存区变更的 blob（含二进制内容）上传到 GitHub，并以上一提交的远端 tree 为基底创建新 tree。校验远端 tree SHA 与本地合并树一致后才创建提交；上传失败或 SHA 不一致时不更新 main，避免引用 runner 本地对象造成 HTTP 422。同步测试使用隔离的远端 Git 对象库模拟 API，而不是直接返回本地 tree SHA。
+创建远端提交前，`scripts/upload-sync-tree.py` 先检查暂存区，若仍有工作流变更则在任何 API 调用前停止并要求人工审查；随后将变更的 blob（含二进制内容）上传到 GitHub，并以上一提交的远端 tree 为基底创建新 tree。校验远端 tree SHA 与本地合并树一致后才创建提交；上传失败或 SHA 不一致时不更新 main，避免引用 runner 本地对象造成 HTTP 422。同步测试使用隔离的远端 Git 对象库模拟 API，而不是直接返回本地 tree SHA，并模拟工作流写入的 HTTP 403 限制。
+
+## 排查 Git tree 上传 HTTP 403
+
+若 `POST /repos/.../git/trees` 报 `Resource not accessible by integration`，但 blob 上传已经成功，检查合并是否改动了 `.github/workflows/`。`contents: write` 不提供工作流写入权限，也不能在 workflow 的 `permissions` 中添加不存在的 `workflows: write` 来解决。
+
+上游 `9fbe87ea` 修改了 `.github/workflows/pr_agent.yml`，旧保护列表仅列出部分工作流，导致该文件被上传并触发 403。现在保留整个工作流目录，业务代码继续正常同步，无需更换 Token。将修复提交并推送到 `main` 后，使用 **Actions → Upstream Sync → Run workflow** 创建新运行，不要只重跑仍使用旧版工作流定义的失败任务。
 
 ## 审查的 60 个上游提交（按时间顺序）
 

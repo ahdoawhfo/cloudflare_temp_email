@@ -60,18 +60,20 @@ jobs:
             printf '%s\n' "$merge_result"
           fi
 
+          # GITHUB_TOKEN cannot change workflow files, even with contents: write.
+          # Preserve the whole directory, including upstream additions/deletions.
+          while IFS= read -r -d '' path; do
+            echo "::notice::Preserving fork workflow; review upstream change manually: $path"
+          done < <(git diff --cached --name-only -z -- .github/workflows)
+
           fork_owned_paths=(
-            ".github/workflows/sync.yaml"
+            ".github/workflows"
             ".github/config/upstream-sync-heartbeat"
             "frontend/.env.pages"
             "scripts/test-upstream-sync.py"
             "scripts/upload-sync-tree.py"
             "vitepress-docs/docs/zh/guide/actions/fork-upstream-sync.md"
             "vitepress-docs/docs/en/guide/actions/fork-upstream-sync.md"
-            ".github/workflows/backend_deploy.yaml"
-            ".github/workflows/frontend_deploy.yaml"
-            ".github/workflows/frontend_pagefunction_deploy.yaml"
-            ".github/workflows/tag_build.yml"
             ".github/config/mail-parser-wasm-worker.patch"
           )
 
@@ -80,7 +82,7 @@ jobs:
             if git cat-file -e "$current_sha:$path" 2>/dev/null; then
               git restore --source="$current_sha" --staged -- "$path"
             else
-              git rm --cached --ignore-unmatch -- "$path"
+              git rm -r --cached --ignore-unmatch -- "$path"
             fi
           done
 
@@ -118,7 +120,9 @@ jobs:
               esac
               protected=false
               for owned in "${fork_owned_paths[@]}"; do
-                if [ "$path" = "$owned" ]; then protected=true; break; fi
+                case "$path" in
+                  "$owned"|"$owned"/*) protected=true; break ;;
+                esac
               done
               if [ "$protected" = false ]; then
                 echo "::error::Unresolved upstream conflict: $path; resolve manually before syncing"

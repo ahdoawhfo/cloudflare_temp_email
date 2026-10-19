@@ -15,6 +15,7 @@
 
 ### Bug Fixes
 
+- fix: |CI| 同步时保留整个 `.github/workflows/` 目录并提示人工审查，上传前拒绝残留工作流变更，修复 `GITHUB_TOKEN` 创建 Git tree 时的 HTTP 403
 - fix: |CI| 创建同步提交前通过 GitHub API 上传合并后的 blob/tree，修复引用仅存在于 runner 本地的 Tree SHA 导致 HTTP 422
 - fix: |CI| 每周同步上游并提交保活记录；无冲突时也保留 fork 专有配置，保留自定义更新日志，未知冲突安全停止，并补充上游升级兼容性说明
 - fix: |CI| 将 `Upstream Sync` 从强依赖 fork 快进同步改为通过 GitHub API 合并上游 `main`，保留本仓库自定义提交，并避免同步失败后继续触发部署

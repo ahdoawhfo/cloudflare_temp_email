@@ -41,6 +41,8 @@ def main():
     entries = []
     for path in filter(None, changed):
         name = path.decode('utf-8')
+        if name == '.github/workflows' or name.startswith('.github/workflows/'):
+            raise RuntimeError(f'Workflow changes require manual review; refusing upload: {name}')
         if path not in staged:
             entries.append({'path': name, 'mode': '100644', 'type': 'blob', 'sha': None})
             continue

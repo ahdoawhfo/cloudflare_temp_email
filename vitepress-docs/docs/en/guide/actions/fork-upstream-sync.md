@@ -36,7 +36,7 @@ Other compatibility considerations:
 
 Runs every Monday **03:17 UTC**, or manually, targeting `main` with serialized concurrent runs. `git merge-tree` computes the merge without changing Git identity; GitHub Git API creates commits.
 
-Protected paths always retain their current fork contents, even for clean merges: sync/backend/both frontend/tag-build workflows, WASM patch, `frontend/.env.pages`, sync test/object-upload scripts, these bilingual guides and heartbeat file. Maintain `fork_owned_paths` when adding custom files. Other files receive ordinary three-way merges.
+Protected paths always retain their current fork contents, even for clean merges: the entire `.github/workflows/` directory, WASM patch, `frontend/.env.pages`, sync test/object-upload scripts, these bilingual guides and heartbeat file. Workflow protection covers upstream additions, deletions and conflicts. Skipped changes produce manual-review notices; review and apply workflow updates manually, as they are not synchronized automatically. Maintain `fork_owned_paths` when adding custom files. Other files receive ordinary three-way merges.
 
 Conflicting changelogs retain upstream structure and reinsert fork-added bullets since the common ancestor into the current Bug Fixes section. This handles added entries, not arbitrary edits to historical sections. Unknown code conflicts fail without publishing or force-pushing. `force=false` also rejects an update if another commit advanced main during the run; rerun afterward.
 
@@ -50,11 +50,17 @@ This is not an external scheduler: persistent failures, disabled Actions or miss
 2. Manually select **Actions → Upstream Sync → Enable workflow**. A disabled workflow cannot wake itself using cron.
 3. **Back up D1 and prepare a migration window before the first run**, since successful sync triggers deployments. To review the merge first, temporarily disable deployment workflows manually and restore them afterward.
 4. Run manually, review the result and protected configuration, migrate Schema, add optional variables as needed, then verify receiving/login/sending/webhook/WASM parsing.
-5. Keep `contents: write`; branch protection/Rulesets must permit synchronization. `GITHUB_TOKEN` cannot freely rewrite workflow files. If future changes to unprotected `.github/workflows/*` are rejected, manually review/merge them rather than blindly broadening token privileges.
+5. Keep `contents: write`; branch protection/Rulesets must permit synchronization. `GITHUB_TOKEN` cannot rewrite workflow files, so the entire `.github/workflows/` directory is excluded from automatic updates. Review and update workflows through your normal authorized commit process; automatic sync needs no additional PAT or broader token privileges.
 
 Isolated checks cover merge trees, protected files, changelogs, unknown-conflict rejection and WASM patch compatibility. No live GitHub API writes, Cloudflare deployments or production database migrations were performed.
 
-Before creating a remote commit, `scripts/upload-sync-tree.py` uploads changed staged blobs (including binary content) and creates a remote tree based on the previous commit’s tree. The remote tree SHA must match the local merge tree before committing. Upload failures or SHA mismatches leave main unchanged, preventing HTTP 422 from runner-local objects. Tests model the API with an isolated remote Git object database instead of returning a local tree SHA.
+Before any API calls, `scripts/upload-sync-tree.py` checks the index and stops for manual review if workflow changes remain. It then uploads changed staged blobs (including binary content) and creates a remote tree based on the previous commit’s tree. The remote tree SHA must match the local merge tree before committing. Upload failures or SHA mismatches leave main unchanged, preventing HTTP 422 from runner-local objects. Tests model the API with an isolated remote Git object database instead of returning a local tree SHA, including the HTTP 403 restriction on workflow writes.
+
+## Troubleshooting HTTP 403 during Git tree upload
+
+If `POST /repos/.../git/trees` returns `Resource not accessible by integration` after successful blob uploads, check whether the merge changes `.github/workflows/`. `contents: write` does not grant workflow-write access, and adding the nonexistent `workflows: write` workflow permission is not a solution.
+
+Upstream `9fbe87ea` changed `.github/workflows/pr_agent.yml`, which the old partial protection list did not include, triggering HTTP 403 during upload. Protecting the entire workflow directory lets business-code updates continue without replacing the token. Commit and push the fix to `main`, then start a new run with **Actions → Upstream Sync → Run workflow** instead of rerunning failed jobs that still use the old workflow definition.
 
 ## Reviewed 60 upstream commits (chronological order)
 
