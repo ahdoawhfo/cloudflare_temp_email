@@ -6,7 +6,25 @@
   <a href="CHANGELOG_EN.md">English</a>
 </p>
 
-## v1.13.0(main)
+## v1.14.0(main)
+
+### Features
+
+### Bug Fixes
+
+- fix: |Telegram| 管理员删除邮箱前清理当前推送用户的绑定及推送映射，释放名额并避免同名重建后继续推送；KV 清理失败时保留邮箱供重试，数据库删除失败时可能已解绑
+- fix: |CI| 修复 WASM npm 包发布路径，避免本地 tarball 被误识别为 GitHub 仓库
+- fix: |邮件解析| 升级 WASM 解析依赖，仅对结构化邮件头补充原始值，保留原有文本头解码行为，修复 `header.From` Webhook 过滤失效及移除附件后发件人丢失的问题
+- fix: |邮件解析| 兼容 postal-mime v4 的首个头字段语义，备用解析支持空或缺失 From，移除附件时重新生成 MIME 类型与编码头，避免入库后正文丢失
+- fix: |Telegram| 使用独立的永久内部绑定 token，兼容历史过期绑定；打开邮箱时签发邮箱凭据，阻止内部 token 用于邮箱 API
+- fix: |Worker| 未知邮件、未绑定地址及空地址清理改为分批处理，避免大量积压数据导致 D1 操作超时
+- fix: |用户系统| 邮箱转移确认按钮绑定已有请求加载状态，修复 loading 变量未定义
+
+### Improvements
+
+- perf: |CI| 整理测试目录，独立 Webhook UI 功能组，与 API、其他浏览器测试、SMTP/IMAP 并行执行；仅启动各组所需服务，保留单元测试、WASM 测试与统一检查结果
+
+## v1.13.0
 
 ### Features
 
